@@ -1,0 +1,112 @@
+version: "3.7"
+
+services:
+  mysql:
+    image: mysql:8.0.20
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYDB_ADMIN_PASSWD}
+      MYSQL_DATABASE: ${MYDB_DB_NAME}
+      MYSQL_USER: ${MYDB_USER}
+      MYSQL_PASSWORD: ${MYDB_PASSWD}
+    volumes:
+      - ./mysql/dbinit:/docker-entrypoint-initdb.d:z    # Script to initialize db
+      - ./mysql/dbdata:/var/lib/mysql:z # DB Data
+    labels:
+      client: ${ClientName}
+ 
+
+  adminer:
+    image: adminer:4.7.7-standalone
+    restart: always
+    depends_on:
+      - mysql
+    ports:
+      - 8080:8080
+    environment:
+      ADMINER_DEFAULT_SERVER: mysql
+    labels:
+      client: ${ClientName}
+
+  wordpress:
+    image: wordpress:php7.2-fpm-alpine
+    restart: un
+    depends_on:
+      - mysql
+    ports:
+      - 80:80
+    volumes:
+      - ./wordpress/html/:/var/www/html/:z
+    environment:
+      WORDPRESS_DB_HOST: mysql
+      WORDPRESS_DB_USER: ${MYDB_USER}
+      WORDPRESS_DB_PASSWORD: ${MYDB_PASSWD}
+      WORDPRESS_DB_NAME: ${MYDB_DB_NAME}
+    labels:
+      client: ${ClientName}
+
+  ftp:
+    image: fauria/vsftpd:latest
+    restart: always
+    ports:
+      #- 20:20
+      - ${UNIQUE_SFTP_PORT}:21
+    volumes:
+      - ./wordpress/html/:/home/vsftpd/:z
+    environment:
+      FTP_USER: ${MYDB_USER}
+      FTP_PASS: ${MYDB_PASSWD}
+      PASV_ENABLE: "NO"
+    labels:
+      client: ${ClientName}
+
+  traefik:
+    image: traefik:v2.2.1
+    restart: always
+    ports:
+      - 80:80/tcp
+      - 443:443/tcp 
+      - 8080:8080    # Traefik Dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./traefik/traefik.yaml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic:/etc/traefik/dynamic/:z
+    #environment:  
+    labels:
+      client: ${ClientName}
+
+  # Metrics
+  prometheus:
+    image: prom/prometheus:v2.18.1
+    restart: always
+    ports:
+      - 9090:9090
+    volumes:
+      - ./prometheus/config/:/etc/prometheus/:z # prometheus.yml location
+    labels:
+      client: ${ClientName}
+  
+  # Dashboard
+  grafana:
+    image: grafana/grafana:5.4.3
+    restart: always
+    depends_on:
+      - prometheus
+    ports:
+      - 3000:3000
+    labels:
+      client: ${ClientName}
+
+  # Logging
+  #graylog:
+  #  image: graylog/graylog:
+    
+
+  # Logging Agro
+  #sentry:
+  #  image: 
+
+networks:
+  default:
+    external:
+      name: ${ClientName}
